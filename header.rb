@@ -8,6 +8,7 @@ class Header
 
   R_CODE_SUCCESS = 0
 
+  attr_accessor :qd_count, :an_count
 
   def initialize(id, qr, op_code, tc, rd, ra, r_code, qd_count, an_count, ns_count, ar_count)
     @id = id

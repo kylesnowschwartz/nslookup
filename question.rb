@@ -1,5 +1,5 @@
 class Question
-  Q_TYPE_NAME = 2
+  Q_TYPE_A = 1
   Q_CLASS_INTERNET = 1
 
   def initialize(domain_name, q_type, q_class)
@@ -23,14 +23,7 @@ class Question
   end
 
   def self.from_bytes(unpacker)
-    components = []
-    while true
-      component_length = unpacker.read_byte
-      break if component_length == 0
-      component = unpacker.read_string(component_length)
-      components << component
-    end
-    domain_name = components.join(".")
+    domain_name = unpacker.read_domain_name
 
     q_type, q_class = unpacker.read_int16, unpacker.read_int16
 
