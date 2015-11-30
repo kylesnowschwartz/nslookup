@@ -27,7 +27,7 @@ class Header
     @ar_count = ar_count
   end
 
-  def as_bytes
+  def to_bytes
     packed1 = @qr << 7 | @op_code << 3 | @aa << 2 | @tc << 1 | @rd
     packed2 = @ra << 7 | @z << 4 |@r_code
     header_fields = [@id, packed1, packed2, @qd_count, @an_count, @ns_count, @ar_count]
@@ -36,8 +36,15 @@ class Header
       .pack("S>CCS>S>S>S>")
   end
 
-  def self.from_bytes(message)
-    id, packed1, packed2, qd_count, an_count, ns_count, ar_count = message.unpack("S>CCS>S>S>S>")
+  def self.from_bytes(unpacker)
+    id = unpacker.read_int16
+    packed1 = unpacker.read_byte
+    packed2 = unpacker.read_byte
+    qd_count = unpacker.read_int16
+    an_count = unpacker.read_int16
+    ns_count = unpacker.read_int16
+    ar_count = unpacker.read_int16
+
     qr = packed1 >> 7 & 1
     op_code = packed1 >> 3 & 15
     aa = packed1 >> 2 & 3
@@ -47,7 +54,7 @@ class Header
     z = packed2 >> 4 & 7
     r_code = packed2 & 1
 
-    [Header.new(id, qr, op_code, tc, rd, ra, r_code, qd_count, an_count, ns_count, ar_count), 12]
+    Header.new(id, qr, op_code, tc, rd, ra, r_code, qd_count, an_count, ns_count, ar_count)
   end
 end
 
@@ -69,39 +76,25 @@ class Question
     end.join + "\0"
   end
 
-  def as_bytes
+  def to_bytes
     question_fields = [@q_type, @q_class]
 
     domain_to_q_name(@domain_name) + question_fields.pack("S>S>")
   end
 
-  def self.from_bytes(message)
-    offset = 0
+  def self.from_bytes(unpacker)
     components = []
     while true
-      component_length, offset = read_byte(message, offset)
+      component_length = unpacker.read_byte
       break if component_length == 0
-      component, offset = read_string(message, offset, component_length)
-      puts component.inspect
+      component = unpacker.read_string(component_length)
       components << component
     end
     domain_name = components.join(".")
 
-    q_type, q_class = message[offset..-1].unpack("S>S>")
-    offset += 4
+    q_type, q_class = unpacker.read_int16, unpacker.read_int16
 
-    question = Question.new(domain_name, q_type, q_class)
-
-    [question, offset]
-  end
-
-  def self.read_byte(message, offset)
-    [message[offset..offset].unpack("C")[0], offset + 1]
-  end
-
-  def self.read_string(message, offset, length)
-    puts "offset #{offset} length #{length}"
-    [message[offset..(offset + length -1)], offset + length]
+    Question.new(domain_name, q_type, q_class)
   end
 end
 
@@ -111,35 +104,57 @@ class Message
     @question = question
   end
 
-  def as_bytes
-    @header.as_bytes + @question.as_bytes
+  def to_bytes
+    @header.to_bytes + @question.to_bytes
   end
 end
+
+class Unpacker
+  def initialize(message)
+    @message = message
+    @offset = 0
+  end
+
+  def read_byte
+    byte = @message[@offset..@offset].unpack("C")[0]
+    @offset += 1
+    byte
+  end
+
+  def read_string(length)
+    str = @message[@offset..(@offset + length -1)]
+    @offset += length
+    str
+  end
+
+  def read_int16
+    i = @message[@offset..-1].unpack("S>")[0]
+    @offset += 2
+    i
+  end
+end
+
+
 
 header = Header.new(1, Header::QR_QUERY, Header::OP_CODE_QUERY, 0, 1, 0, Header::R_CODE_SUCCESS, 1, 0, 0, 0)
 
 question = Question.new("powershop.co.nz", Question::Q_TYPE_NAME, Question::Q_CLASS_INTERNET)
 
-new_question = Question.from_bytes(question.as_bytes)
-
-puts "old #{question.inspect}"
-puts "new #{new_question.inspect}"
-
 message = Message.new(header, question)
 
-# puts message.as_bytes.inspect
+# puts message.to_bytes.inspect
 
 socket = UDPSocket.new
 
 socket.connect("8.8.8.8", 53)
 
-bytes_send = socket.send(message.as_bytes, 0)
+bytes_send = socket.send(message.to_bytes, 0)
 
 p "bytes sent: #{bytes_send}"
 
 response = socket.recvfrom(1000)
 
-response_header = Header.from_bytes(response[0])
+response_header = Header.from_bytes(Unpacker.new(response[0]))
 
 p "response header: #{response_header.inspect}"
 p "message: #{response[0]}"
