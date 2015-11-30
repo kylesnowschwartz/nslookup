@@ -28,7 +28,7 @@ class Header
 
   def to_bytes
     packed1 = @qr << 7 | @op_code << 3 | @aa << 2 | @tc << 1 | @rd
-    packed2 = @ra << 7 | @z << 4 |@r_code
+    packed2 = @ra << 7 | @z << 4 | @r_code
     header_fields = [@id, packed1, packed2, @qd_count, @an_count, @ns_count, @ar_count]
 
     header_fields
